@@ -14,32 +14,50 @@ jobs:
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 2. Create Admin Account & Workspace Folder
+      - name: 2. Create Admin Account & Folders
         run: |
           $Password = ConvertTo-SecureString "Cynet@2026" -AsPlainText -Force
           New-LocalUser -Name "CynetAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "CynetAdmin" -ErrorAction SilentlyContinue
           net user runneradmin Cynet@2026
           
-          # ساخت پوشه هارد دائمی در مسیر کاربر
+          # ساخت پوشه‌های مورد نیاز کاربر
           New-Item -ItemType Directory -Force -Path "C:\Users\CynetAdmin\workspace"
+          New-Item -ItemType Directory -Force -Path "C:\Users\CynetAdmin\Desktop"
+          New-Item -ItemType Directory -Force -Path "C:\Users\CynetAdmin\Documents"
+          New-Item -ItemType Directory -Force -Path "C:\Users\CynetAdmin\Downloads"
+
+      - name: 3. Enable Dark Theme
+        run: |
+          reg load HKU\DefaultUser "C:\Users\Default\NTUSER.DAT"
+          if (-not (Test-Path "HKU:\DefaultUser\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize")) {
+              New-Item -Path "HKU:\DefaultUser\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Force | Out-Null
+          }
+          Set-ItemProperty -Path "HKU:\DefaultUser\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord
+          Set-ItemProperty -Path "HKU:\DefaultUser\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord
+          [gc]::Collect()
+          reg unload HKU\DefaultUser
 
       # بازیابی فایل‌های قبلی از کش ابری گیتهاب
-      - name: 3. Restore Persistent Workspace
+      - name: 4. Restore Persistent Workspace
         uses: actions/cache@v4
         with:
-          path: C:\Users\CynetAdmin\workspace
+          path: |
+            C:\Users\CynetAdmin\Desktop
+            C:\Users\CynetAdmin\Documents
+            C:\Users\CynetAdmin\Downloads
+            C:\Users\CynetAdmin\workspace
           key: cynet-rdp-workspace-${{ github.run_id }}
           restore-keys: |
             cynet-rdp-workspace-
 
-      - name: 4. Enable Remote Desktop & Firewall
+      - name: 5. Enable Remote Desktop & Firewall
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
 
-      - name: 5. Install & Connect Tailscale VPN
+      - name: 6. Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
@@ -62,21 +80,24 @@ jobs:
           Write-Host "  Tailscale IP    : $ts_ip" -ForegroundColor Yellow
           Write-Host "  Username        : CynetAdmin" -ForegroundColor Yellow
           Write-Host "  Password        : Cynet@2026" -ForegroundColor Yellow
-          Write-Host "  Persistent Path : C:\Users\CynetAdmin\workspace" -ForegroundColor Cyan
           Write-Host "  >> Open mstsc and connect to: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
-      - name: 6. Keep Server Alive (5 Hours 55 Minutes)
+      - name: 7. Keep Server Alive (5 Hours 55 Minutes)
         run: |
           for ($i = 1; $i -le 355; $i++) {
             Start-Sleep -Seconds 60
             Write-Host "[$i/355] Windows RDP Server active..."
           }
 
-      # ذخیره خودکار پوشه دائمی قبل از بسته شدن سرور
-      - name: 7. Save Workspace to Cloud
+      # ذخیره خودکار پوشه‌های تعیین‌شده قبل از بسته شدن سرور
+      - name: 8. Save Workspace to Cloud
         uses: actions/cache@v4
         if: always()
         with:
-          path: C:\Users\CynetAdmin\workspace
+          path: |
+            C:\Users\CynetAdmin\Desktop
+            C:\Users\CynetAdmin\Documents
+            C:\Users\CynetAdmin\Downloads
+            C:\Users\CynetAdmin\workspace
           key: cynet-rdp-workspace-${{ github.run_id }}
